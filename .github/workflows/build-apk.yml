@@ -50,7 +50,7 @@ jobs:
         if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && success()
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release.apk
+          files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release-unsigned.apk
           tag_name: v${{ github.run_number }}
           name: v${{ github.run_number }} - Stable Release
           draft: false
@@ -62,7 +62,7 @@ jobs:
         if: github.ref == 'refs/heads/dev' && success()
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release.apk
+          files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release-unsigned.apk
           tag_name: dev-${{ steps.sha.outputs.short_sha }}
           name: dev-${{ steps.sha.outputs.short_sha }} - Development Prerelease
           draft: false
@@ -78,18 +78,18 @@ jobs:
           
           # Update or add stable download link section
           if grep -q "## Latest Stable Release" README.md; then
-            sed -i 's|.*Latest Stable Release.*|## Latest Stable Release\n\n[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)|' README.md
+            sed -i 's|.*Latest Stable Release.*|## Latest Stable Release\n\n[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release-unsigned.apk)|' README.md
           else
             # If "Latest Build" exists, replace it
             if grep -q "## Latest Build" README.md; then
               sed -i 's|## Latest Build|## Latest Stable Release|' README.md
-              sed -i 's|.*Download.*APK.*|[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)|' README.md
+              sed -i 's|.*Download.*APK.*|[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release-unsigned.apk)|' README.md
             else
               # Add new section at top
               {
                 echo "## Latest Stable Release"
                 echo ""
-                echo "[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)"
+                echo "[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release-unsigned.apk)"
                 echo ""
                 cat README.md
               } > README.md.tmp && mv README.md.tmp README.md
@@ -120,7 +120,7 @@ jobs:
                   # Found next section, output dev section first
                   echo "## Latest Dev Prerelease"
                   echo ""
-                  echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release.apk)"
+                  echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release-unsigned.apk)"
                   echo ""
                   echo "$line"
                   in_dev_section=0
@@ -134,7 +134,7 @@ jobs:
             if [[ $in_dev_section -eq 1 ]]; then
               echo "## Latest Dev Prerelease" >> README.md.tmp
               echo "" >> README.md.tmp
-              echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release.apk)" >> README.md.tmp
+              echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release-unsigned.apk)" >> README.md.tmp
               echo "" >> README.md.tmp
             fi
             
