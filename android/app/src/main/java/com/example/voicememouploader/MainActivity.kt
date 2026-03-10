@@ -1,6 +1,8 @@
 package com.example.voicememouploader
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +26,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var mediaStoreRepository: MediaStoreRepository
     private lateinit var uploadService: UploadService
+    private lateinit var updateService: UpdateService
 
     private val requestPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
@@ -32,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
         mediaStoreRepository = MediaStoreRepository(this)
         uploadService = UploadService()
+        updateService = UpdateService()
 
         val permissionsToRequest = mutableListOf(Manifest.permission.INTERNET)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -42,9 +47,17 @@ class MainActivity : ComponentActivity() {
         requestPermissions.launch(permissionsToRequest.toTypedArray())
 
         setContent {
+            val versionName = try {
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.0"
+            } catch (_: Exception) {
+                "1.0.0"
+            }
+
             VoiceMemoUploaderApp(
                 mediaStoreRepository = mediaStoreRepository,
-                uploadService = uploadService
+                uploadService = uploadService,
+                updateService = updateService,
+                currentVersion = versionName
             )
         }
     }
@@ -54,8 +67,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun VoiceMemoUploaderApp(
     mediaStoreRepository: MediaStoreRepository,
-    uploadService: UploadService
+    uploadService: UploadService,
+    updateService: UpdateService,
+    currentVersion: String
 ) {
+    val context = LocalContext.current
+
     var memos by remember { mutableStateOf<List<VoiceMemo>>(emptyList()) }
     var selectedMemos by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var status by remember { mutableStateOf("") }
@@ -70,6 +87,10 @@ fun VoiceMemoUploaderApp(
     var folderExpanded by remember { mutableStateOf(false) }
     val topFolders by remember { mutableStateOf(mediaStoreRepository.getTopLevelFolders()) }
 
+    var isCheckingUpdates by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateStatus by remember { mutableStateOf("") }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -77,14 +98,64 @@ fun VoiceMemoUploaderApp(
                     text = "Voice Memo Uploader",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                Text(
-                    text = "Filters",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp
-                )
+                Text("Version $currentVersion", color = Color.Gray, fontSize = 12.sp)
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        isCheckingUpdates = true
+                        updateStatus = "Checking for updates..."
+                        val result = updateService.checkForUpdate(currentVersion)
+                        result.onSuccess { info ->
+                            updateInfo = info
+                            updateStatus = if (info == null) "App is up to date" else "Update available: v${info.versionName}"
+                        }.onFailure {
+                            updateStatus = "Update check failed: ${it.message}"
+                        }
+                        isCheckingUpdates = false
+                    },
+                    enabled = !isCheckingUpdates,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isCheckingUpdates) "Checking..." else "Check for App Update")
+                }
+
+                if (updateStatus.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(updateStatus, fontSize = 12.sp, color = Color.Gray)
+                }
+
+                updateInfo?.let { info ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Update v${info.versionName} available", fontWeight = FontWeight.SemiBold)
+                            if (info.notes.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(info.notes.take(180), fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                info.apkUrl?.let { apk ->
+                                    Button(onClick = {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apk))
+                                        context.startActivity(intent)
+                                    }) { Text("Download APK") }
+                                }
+                                OutlinedButton(onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.releaseUrl))
+                                    context.startActivity(intent)
+                                }) { Text("Open Release") }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Filters", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
@@ -118,21 +189,15 @@ fun VoiceMemoUploaderApp(
                         expanded = folderExpanded,
                         onDismissRequest = { folderExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("All folders") },
-                            onClick = {
-                                selectedFolder = null
-                                folderExpanded = false
-                            }
-                        )
+                        DropdownMenuItem(text = { Text("All folders") }, onClick = {
+                            selectedFolder = null
+                            folderExpanded = false
+                        })
                         topFolders.forEach { folder ->
-                            DropdownMenuItem(
-                                text = { Text(folder) },
-                                onClick = {
-                                    selectedFolder = folder
-                                    folderExpanded = false
-                                }
-                            )
+                            DropdownMenuItem(text = { Text(folder) }, onClick = {
+                                selectedFolder = folder
+                                folderExpanded = false
+                            })
                         }
                     }
                 }
@@ -148,17 +213,11 @@ fun VoiceMemoUploaderApp(
                         )
                         memos = mediaStoreRepository.getVoiceMemos(options)
                         selectedMemos = emptySet()
-                        status = if (memos.isEmpty()) {
-                            "No matching voice memos found"
-                        } else {
-                            "Found ${memos.size} voice memo(s)"
-                        }
+                        status = if (memos.isEmpty()) "No matching voice memos found" else "Found ${memos.size} voice memo(s)"
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     enabled = !isUploading
-                ) {
-                    Text("Scan Voice Memos", fontSize = 16.sp)
-                }
+                ) { Text("Scan Voice Memos", fontSize = 16.sp) }
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
@@ -169,19 +228,9 @@ fun VoiceMemoUploaderApp(
 
                 if (showServerConfig) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = serverIp,
-                        onValueChange = { serverIp = it },
-                        label = { Text("Tailscale IP") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = serverIp, onValueChange = { serverIp = it }, label = { Text("Tailscale IP") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = serverPort,
-                        onValueChange = { serverPort = it },
-                        label = { Text("Port") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = serverPort, onValueChange = { serverPort = it }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth())
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -195,16 +244,9 @@ fun VoiceMemoUploaderApp(
 
                 if (memos.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Memos (${selectedMemos.size}/${memos.size} selected)",
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                    Text("Memos (${selectedMemos.size}/${memos.size} selected)", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFFF5F5F5)).padding(8.dp)
-                    ) {
+                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFFF5F5F5)).padding(8.dp)) {
                         items(memos) { memo ->
                             MemoListItem(
                                 memo = memo,
@@ -228,14 +270,8 @@ fun VoiceMemoUploaderApp(
                             val memosToUpload = memos.filter { selectedMemos.contains(it.id) }
                             uploadService.uploadMemos(
                                 memosToUpload,
-                                onProgress = {
-                                    status = it
-                                    isUploading = false
-                                },
-                                onError = {
-                                    status = it
-                                    isUploading = false
-                                }
+                                onProgress = { status = it; isUploading = false },
+                                onError = { status = it; isUploading = false }
                             )
                         } else {
                             status = "Select memos to upload"
@@ -243,9 +279,7 @@ fun VoiceMemoUploaderApp(
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     enabled = !isUploading
-                ) {
-                    Text("Upload Selected", fontSize = 16.sp)
-                }
+                ) { Text("Upload Selected", fontSize = 16.sp) }
             }
         }
     }
@@ -264,11 +298,7 @@ fun MemoListItem(
         modifier = Modifier.fillMaxWidth().background(Color.White).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
-            checked = isSelected,
-            onCheckedChange = onSelectionChanged,
-            modifier = Modifier.padding(end = 12.dp)
-        )
+        Checkbox(checked = isSelected, onCheckedChange = onSelectionChanged, modifier = Modifier.padding(end = 12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(text = memo.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
