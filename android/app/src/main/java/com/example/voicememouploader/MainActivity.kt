@@ -10,8 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,12 +25,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var uploadService: UploadService
 
     private val requestPermissions =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
-            val allGranted = permissions.values.all { it }
-            if (allGranted) {
-                // Permissions granted
-            }
-        }
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,17 +33,12 @@ class MainActivity : ComponentActivity() {
         mediaStoreRepository = MediaStoreRepository(this)
         uploadService = UploadService()
 
-        // Request permissions
-        val permissionsToRequest = mutableListOf(
-            Manifest.permission.INTERNET
-        )
-
+        val permissionsToRequest = mutableListOf(Manifest.permission.INTERNET)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
             permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-
         requestPermissions.launch(permissionsToRequest.toTypedArray())
 
         setContent {
@@ -62,6 +50,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VoiceMemoUploaderApp(
     mediaStoreRepository: MediaStoreRepository,
@@ -75,58 +64,111 @@ fun VoiceMemoUploaderApp(
     var serverIp by remember { mutableStateOf("100.100.100.100") }
     var serverPort by remember { mutableStateOf("8080") }
 
+    var recordingsOnly by remember { mutableStateOf(true) }
+    var minDurationSeconds by remember { mutableStateOf("10") }
+    var selectedFolder by remember { mutableStateOf<String?>(null) }
+    var folderExpanded by remember { mutableStateOf(false) }
+    val topFolders by remember { mutableStateOf(mediaStoreRepository.getTopLevelFolders()) }
+
     MaterialTheme {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // Header
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                 Text(
                     text = "Voice Memo Uploader",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 24.dp)
+                    modifier = Modifier.padding(bottom = 16.dp)
                 )
 
-                // Scan Button
+                Text(
+                    text = "Filters",
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = recordingsOnly,
+                        onCheckedChange = { recordingsOnly = it }
+                    )
+                    Text("Only recorder voice memos (exclude Slack/notifications)")
+                }
+
+                OutlinedTextField(
+                    value = minDurationSeconds,
+                    onValueChange = { minDurationSeconds = it.filter(Char::isDigit) },
+                    label = { Text("Min duration (seconds)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                ExposedDropdownMenuBox(
+                    expanded = folderExpanded,
+                    onExpandedChange = { folderExpanded = !folderExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedFolder ?: "All folders",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Top-level folder to scan") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = folderExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = folderExpanded,
+                        onDismissRequest = { folderExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("All folders") },
+                            onClick = {
+                                selectedFolder = null
+                                folderExpanded = false
+                            }
+                        )
+                        topFolders.forEach { folder ->
+                            DropdownMenuItem(
+                                text = { Text(folder) },
+                                onClick = {
+                                    selectedFolder = folder
+                                    folderExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        memos = mediaStoreRepository.getVoiceMemos()
+                        status = "Scanning..."
+                        val options = MediaStoreRepository.ScanOptions(
+                            recordingsOnly = recordingsOnly,
+                            topLevelFolder = selectedFolder,
+                            minDurationMs = (minDurationSeconds.toLongOrNull() ?: 10L) * 1000
+                        )
+                        memos = mediaStoreRepository.getVoiceMemos(options)
                         selectedMemos = emptySet()
-                        status = if (memos.isEmpty()) "No voice memos found" else "Found ${memos.size} memo(s)"
+                        status = if (memos.isEmpty()) {
+                            "No matching voice memos found"
+                        } else {
+                            "Found ${memos.size} voice memo(s)"
+                        }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
                     enabled = !isUploading
                 ) {
                     Text("Scan Voice Memos", fontSize = 16.sp)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Server Config Button
+                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = { showServerConfig = !showServerConfig },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Gray
-                    )
-                ) {
-                    Text("Server Config")
-                }
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                ) { Text("Server Config") }
 
-                // Server Config Section
                 if (showServerConfig) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = serverIp,
                         onValueChange = { serverIp = it },
@@ -140,67 +182,50 @@ fun VoiceMemoUploaderApp(
                         label = { Text("Port") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Status Text
+                Spacer(modifier = Modifier.height(12.dp))
                 if (status.isNotEmpty()) {
                     Text(
                         text = status,
                         color = if (isUploading) Color.Blue else Color.Black,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color.LightGray)
-                            .padding(12.dp)
+                        modifier = Modifier.fillMaxWidth().background(Color.LightGray).padding(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                // Memos List
                 if (memos.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "Memos (${selectedMemos.size}/${memos.size} selected)",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 16.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
 
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .background(Color(0xFFF5F5F5))
-                            .padding(8.dp)
+                        modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFFF5F5F5)).padding(8.dp)
                     ) {
                         items(memos) { memo ->
                             MemoListItem(
                                 memo = memo,
                                 isSelected = selectedMemos.contains(memo.id),
                                 onSelectionChanged = { selected ->
-                                    selectedMemos = if (selected) {
-                                        selectedMemos + memo.id
-                                    } else {
-                                        selectedMemos - memo.id
-                                    }
+                                    selectedMemos = if (selected) selectedMemos + memo.id else selectedMemos - memo.id
                                 },
                                 mediaStoreRepository = mediaStoreRepository
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
 
-                // Upload Button
                 Button(
                     onClick = {
                         if (selectedMemos.isNotEmpty()) {
                             isUploading = true
                             status = "Uploading..."
                             val memosToUpload = memos.filter { selectedMemos.contains(it.id) }
-                            
                             uploadService.uploadMemos(
                                 memosToUpload,
                                 onProgress = {
@@ -216,15 +241,10 @@ fun VoiceMemoUploaderApp(
                             status = "Select memos to upload"
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF6200EE)
-                    ),
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
                     enabled = !isUploading
                 ) {
-                    Text("Upload Selected", fontSize = 16.sp, color = Color.White)
+                    Text("Upload Selected", fontSize = 16.sp)
                 }
             }
         }
@@ -238,11 +258,10 @@ fun MemoListItem(
     onSelectionChanged: (Boolean) -> Unit,
     mediaStoreRepository: MediaStoreRepository
 ) {
+    val voiceLevel = mediaStoreRepository.estimateVoiceLevel(memo.duration, memo.size)
+
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(12.dp),
+        modifier = Modifier.fillMaxWidth().background(Color.White).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Checkbox(
@@ -251,23 +270,18 @@ fun MemoListItem(
             modifier = Modifier.padding(end = 12.dp)
         )
 
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = memo.title,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp
-            )
-            Text(
-                text = mediaStoreRepository.formatDate(memo.dateAdded),
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = memo.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text(text = mediaStoreRepository.formatDate(memo.dateAdded), fontSize = 12.sp, color = Color.Gray)
             Text(
                 text = "Duration: ${mediaStoreRepository.formatDuration(memo.duration)} | Size: ${formatBytes(memo.size)}",
                 fontSize = 11.sp,
                 color = Color.Gray
+            )
+            Text(
+                text = "Voice level: ${"▮".repeat(voiceLevel)}${"▯".repeat(5 - voiceLevel)}",
+                fontSize = 12.sp,
+                color = Color(0xFF5E35B1)
             )
         }
     }
