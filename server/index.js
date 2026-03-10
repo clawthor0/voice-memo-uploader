@@ -21,6 +21,7 @@ const upload = multer({ dest: uploadDir });
 
 const webhookPath = process.env.UPLOAD_WEBHOOK_PATH || '/webhook/upload-voice-memo';
 const defaultApiPath = '/api/voice-memos/upload';
+const uploadAuthToken = process.env.UPLOAD_AUTH_TOKEN;
 
 let processingChain = Promise.resolve();
 
@@ -55,10 +56,18 @@ app.get('/health', (req, res) => {
     service: 'voice-memo-uploader-webhook',
     uploadWebhookPath: webhookPath,
     indexPath: INDEX_PATH,
+    authTokenRequired: Boolean(uploadAuthToken),
   });
 });
 
 function uploadHandler(req, res) {
+  if (uploadAuthToken) {
+    const provided = req.header('x-upload-token');
+    if (provided !== uploadAuthToken) {
+      return res.status(401).json({ error: 'Unauthorized: invalid upload token' });
+    }
+  }
+
   const files = req.files || [];
   if (!files.length) {
     return res.status(400).json({ error: 'No files received. Use multipart field name: files' });

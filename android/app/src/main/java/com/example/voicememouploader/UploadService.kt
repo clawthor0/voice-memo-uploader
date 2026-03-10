@@ -12,7 +12,7 @@ import java.io.IOException
 class UploadService(
     private var serverHostOrUrl: String = "https://your-tailnet-name.ts.net",
     private var port: Int = 443,
-    private var uploadPath: String = "/api/voice-memos/upload"
+    private var uploadPath: String = "/webhook/upload-voice-memo"
 ) {
 
     private val client: OkHttpClient

@@ -6,6 +6,8 @@ Minimal Express service for receiving Android voice memo uploads.
 
 - `GET /health` → health check JSON
 - `POST /webhook/upload-voice-memo` → multipart upload (`files` field, supports multiple files)
+- `POST /api/voice-memos/upload` → same upload handler (API alias)
+- `GET /api/voice-memos/status/:id` → upload status/result lookup
 
 Uploaded files are stored under:
 
@@ -78,3 +80,5 @@ Your Android app can then target:
 
 - Keep this service private to your tailnet.
 - `uploads/` is gitignored by default.
+- Processing status index is stored in `server/data/uploads-index.json`.
+- If `UPLOAD_AUTH_TOKEN` is set, include header `x-upload-token: <token>` in upload requests.
