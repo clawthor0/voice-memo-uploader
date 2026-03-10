@@ -39,17 +39,19 @@ class UploadService(
             val multipartBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
 
-            // Add each memo file
+            var filesAdded = 0
             for (memo in memos) {
                 val file = File(memo.path)
-                if (file.exists()) {
+                if (file.exists() && file.isFile) {
                     val requestBody = file.asRequestBody("audio/mpeg".toMediaType())
-                    multipartBuilder.addFormDataPart(
-                        "files",
-                        memo.title,
-                        requestBody
-                    )
+                    multipartBuilder.addFormDataPart("files", memo.title, requestBody)
+                    filesAdded++
                 }
+            }
+
+            if (filesAdded == 0) {
+                onError("Upload error: No readable audio files found in selection")
+                return
             }
 
             val requestBody = multipartBuilder.build()
@@ -60,19 +62,21 @@ class UploadService(
                 .build()
 
             client.newCall(request).execute().use { response ->
+                val responseText = response.body?.string().orEmpty().take(500)
                 if (!response.isSuccessful) {
-                    onError("Upload failed: ${response.code} - ${response.message}")
+                    onError("Upload failed: HTTP ${response.code} ${response.message}; endpoint=$uploadUrl; response=$responseText")
                     return@use
                 }
 
-                val responseBody = response.body?.string() ?: ""
-                onProgress("Upload successful: $responseBody")
+                onProgress("Upload successful: $filesAdded file(s). Response: $responseText")
             }
 
         } catch (e: IOException) {
-            onError("Network error: ${e.message}")
+            val details = e.message ?: e.javaClass.simpleName
+            onError("Network error: $details; endpoint=http://$tailscaleIp:$port/api/voice-memos/upload")
         } catch (e: Exception) {
-            onError("Upload error: ${e.message}")
+            val details = e.message ?: e.javaClass.simpleName
+            onError("Upload error: $details (${e.javaClass.simpleName})")
         }
     }
 
