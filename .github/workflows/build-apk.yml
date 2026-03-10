@@ -1,0 +1,74 @@
+name: Build and Release APK
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+      
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+      
+      - name: Build APK
+        run: ./gradlew assembleRelease
+        
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: warn
+      
+      - name: Create Release (master only)
+        if: github.ref == 'refs/heads/master' && success()
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: v${{ github.run_number }} - Build ${{ github.run_id }}
+          draft: false
+          prerelease: false
+      
+      - name: Upload APK to Release (master only)
+        if: github.ref == 'refs/heads/master' && success()
+        uses: softprops/action-gh-release@v1
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          tag_name: v${{ github.run_number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Update README with download link (master only)
+        if: github.ref == 'refs/heads/master' && success()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Update or add download link
+          if grep -q "Latest Build" README.md; then
+            sed -i 's|.*Latest Build.*|## Latest Build\n\n[📥 Download APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)|' README.md
+          else
+            echo "" >> README.md
+            echo "## Latest Build" >> README.md
+            echo "" >> README.md
+            echo "[📥 Download APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)" >> README.md
+          fi
+          
+          git add README.md
+          git commit -m "chore: update README with latest APK download link [skip ci]" || echo "No changes to commit"
+          git push
