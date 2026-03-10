@@ -98,10 +98,23 @@ fun VoiceMemoUploaderApp(
                     text = "Voice Memo Uploader",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 6.dp)
                 )
 
-                Text("Version $currentVersion", color = Color.Gray, fontSize = 12.sp)
+                Surface(
+                    color = Color(0xFFE8F0FE),
+                    tonalElevation = 2.dp,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "App Version: v$currentVersion",
+                        color = Color(0xFF1A73E8),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
