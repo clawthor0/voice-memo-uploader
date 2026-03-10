@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
-const { processUploadedFile } = require('./processing');
+const { processUploadedFile } = require('./processing/index');
 const { upsertUpload, getUpload, INDEX_PATH } = require('./storage-index');
 
 const app = express();

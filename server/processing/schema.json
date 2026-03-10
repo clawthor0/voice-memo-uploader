@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voice-memo-uploader.local/schemas/voice-processing-record.schema.json",
+  "title": "Voice Processing Record",
+  "type": "object",
+  "required": ["schema_version", "processed_at", "audio_file_path", "status", "transcript", "summary", "category", "metadata"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "processed_at": { "type": "string", "format": "date-time" },
+    "audio_file_path": { "type": "string" },
+    "status": { "type": "string", "enum": ["ok", "error"] },
+    "error": { "type": ["string", "null"] },
+    "transcript": { "type": "string" },
+    "summary": { "type": "string" },
+    "category": { "type": "string", "enum": ["meetings", "ideas_todo", "spiritual", "other"] },
+    "metadata": {
+      "type": "object",
+      "required": ["stt_status", "stt_timeout_ms"],
+      "properties": {
+        "stt_status": { "type": "string" },
+        "stt_command_template": { "type": ["string", "null"] },
+        "stt_timeout_ms": { "type": "number" },
+        "stt_stderr": { "type": "string" },
+        "stt_exit_code": {}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
