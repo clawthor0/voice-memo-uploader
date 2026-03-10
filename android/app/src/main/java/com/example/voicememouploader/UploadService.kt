@@ -11,7 +11,8 @@ import java.io.IOException
 
 class UploadService(
     private var serverHostOrUrl: String = "https://your-tailnet-name.ts.net",
-    private var port: Int = 443
+    private var port: Int = 443,
+    private var uploadPath: String = "/api/voice-memos/upload"
 ) {
 
     private val client: OkHttpClient
@@ -37,7 +38,8 @@ class UploadService(
     ) {
         try {
             val baseUrl = buildBaseUrl(serverHostOrUrl, port)
-            val uploadUrl = "$baseUrl/api/voice-memos/upload"
+            val normalizedPath = if (uploadPath.startsWith("/")) uploadPath else "/$uploadPath"
+            val uploadUrl = "$baseUrl$normalizedPath"
 
             val multipartBuilder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -107,8 +109,30 @@ class UploadService(
         mainHandler.post { onError(message) }
     }
 
-    fun updateServerConfig(hostOrUrl: String, port: Int) {
+    fun pingEndpoint(onResult: (String) -> Unit) {
+        val baseUrl = buildBaseUrl(serverHostOrUrl, port)
+        val normalizedPath = if (uploadPath.startsWith("/")) uploadPath else "/$uploadPath"
+        val url = "$baseUrl$normalizedPath"
+
+        val request = Request.Builder().url(url).get().build()
+        client.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                val details = e.message ?: e.javaClass.simpleName
+                postProgress(onResult, "Ping failed: $details")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val preview = it.body?.string().orEmpty().take(120)
+                    postProgress(onResult, "Ping: HTTP ${it.code}. Body: $preview")
+                }
+            }
+        })
+    }
+
+    fun updateServerConfig(hostOrUrl: String, port: Int, uploadPath: String) {
         this.serverHostOrUrl = hostOrUrl
         this.port = port
+        this.uploadPath = uploadPath
     }
 }

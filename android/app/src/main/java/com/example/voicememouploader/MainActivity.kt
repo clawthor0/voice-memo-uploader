@@ -82,8 +82,9 @@ fun VoiceMemoUploaderApp(
     var status by remember { mutableStateOf("") }
     var isUploading by remember { mutableStateOf(false) }
     var showServerConfig by remember { mutableStateOf(false) }
-    var serverIp by remember { mutableStateOf("https://your-tailnet-name.ts.net") }
+    var serverIp by remember { mutableStateOf("https://webhooks-test.tail8ca5.ts.net") }
     var serverPort by remember { mutableStateOf("443") }
+    var uploadPath by remember { mutableStateOf("/webhook/REPLACE_WITH_YOUR_UPLOAD_HOOK") }
 
     var recordingsOnly by remember { mutableStateOf(true) }
     var minDurationSeconds by remember { mutableStateOf("10") }
@@ -252,6 +253,17 @@ fun VoiceMemoUploaderApp(
                     OutlinedTextField(value = serverIp, onValueChange = { serverIp = it }, label = { Text("Server host or URL (https recommended)") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(value = serverPort, onValueChange = { serverPort = it.filter(Char::isDigit) }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = uploadPath, onValueChange = { uploadPath = it }, label = { Text("Upload path (or webhook path)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val configuredPort = serverPort.toIntOrNull() ?: 443
+                            uploadService.updateServerConfig(serverIp, configuredPort, uploadPath)
+                            uploadService.pingEndpoint { status = it }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Ping Upload Endpoint") }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -289,7 +301,7 @@ fun VoiceMemoUploaderApp(
                             isUploading = true
                             status = "Uploading..."
                             val configuredPort = serverPort.toIntOrNull() ?: 443
-                            uploadService.updateServerConfig(serverIp, configuredPort)
+                            uploadService.updateServerConfig(serverIp, configuredPort, uploadPath)
                             val memosToUpload = memos.filter { selectedMemos.contains(it.id) }
                             uploadService.uploadMemos(
                                 memosToUpload,
