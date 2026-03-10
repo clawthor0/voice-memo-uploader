@@ -28,7 +28,10 @@ class UpdateService(
 
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    return Result.failure(IOException("Update check failed: ${response.code}"))
+                    if (response.code == 404) {
+                        return Result.failure(IOException("Update feed not found (404). If repo is private, use server-hosted update feed or publish GitHub Releases publicly."))
+                    }
+                    return Result.failure(IOException("Update check failed: HTTP ${response.code}"))
                 }
 
                 val body = response.body?.string() ?: return Result.success(null)
