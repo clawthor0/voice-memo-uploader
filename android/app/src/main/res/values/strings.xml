@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Voice Memo Uploader</string>
+    <string name="scan_memos">Scan Voice Memos</string>
+    <string name="upload">Upload Selected</string>
+    <string name="no_memos">No voice memos found</string>
+    <string name="no_selection">Select memos to upload</string>
+    <string name="uploading">Uploading...</string>
+    <string name="upload_complete">Upload Complete</string>
+    <string name="upload_failed">Upload Failed</string>
+    <string name="error">Error</string>
+</resources>
