@@ -2,9 +2,13 @@
 
 A simple Android application for recording and uploading voice memos.
 
-## Latest Build
+## Latest Stable Release
 
-📥 **[Download Latest APK](https://github.com/clawthor0/voice-memo-uploader/releases)**
+📥 **[Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases)**
+
+## Latest Dev Prerelease
+
+📥 **[Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases)** (pre-release builds from `dev` branch)
 
 ## Features
 

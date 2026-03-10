@@ -12,6 +12,9 @@ on:
         required: false
         default: 'dev'
 
+env:
+  ANDROID_BUILD_DIR: ./android
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,54 +30,117 @@ jobs:
           distribution: 'temurin'
       
       - name: Make gradlew executable
-        run: chmod +x ./android/gradlew
+        run: chmod +x ${{ env.ANDROID_BUILD_DIR }}/gradlew
       
       - name: Build APK
-        run: cd ./android && ./gradlew assembleRelease
+        run: cd ${{ env.ANDROID_BUILD_DIR }} && ./gradlew assembleRelease
         
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-release-unsigned
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
       
-      - name: Create Release (master only)
-        if: github.ref == 'refs/heads/master' && success()
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ github.run_number }}
-          release_name: v${{ github.run_number }} - Build ${{ github.run_id }}
-          draft: false
-          prerelease: false
+      - name: Generate short SHA
+        id: sha
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       
-      - name: Upload APK to Release (master only)
-        if: github.ref == 'refs/heads/master' && success()
+      - name: Create Stable Release (master/main only)
+        if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && success()
         uses: softprops/action-gh-release@v1
         with:
-          files: android/app/build/outputs/apk/release/app-release.apk
+          files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release.apk
           tag_name: v${{ github.run_number }}
+          name: v${{ github.run_number }} - Stable Release
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Update README with download link (master only)
-        if: github.ref == 'refs/heads/master' && success()
+      - name: Create Dev Prerelease (dev branch only)
+        if: github.ref == 'refs/heads/dev' && success()
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release.apk
+          tag_name: dev-${{ steps.sha.outputs.short_sha }}
+          name: dev-${{ steps.sha.outputs.short_sha }} - Development Prerelease
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Update README (master/main - stable link)
+        if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && success()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           
-          # Update or add download link
-          if grep -q "Latest Build" README.md; then
-            sed -i 's|.*Latest Build.*|## Latest Build\n\n[📥 Download APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)|' README.md
+          # Update or add stable download link section
+          if grep -q "## Latest Stable Release" README.md; then
+            sed -i 's|.*Latest Stable Release.*|## Latest Stable Release\n\n[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)|' README.md
           else
-            echo "" >> README.md
-            echo "## Latest Build" >> README.md
-            echo "" >> README.md
-            echo "[📥 Download APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)" >> README.md
+            # If "Latest Build" exists, replace it
+            if grep -q "## Latest Build" README.md; then
+              sed -i 's|## Latest Build|## Latest Stable Release|' README.md
+              sed -i 's|.*Download.*APK.*|[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)|' README.md
+            else
+              # Add new section at top
+              {
+                echo "## Latest Stable Release"
+                echo ""
+                echo "[📥 Download Stable APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/v${{ github.run_number }}/app-release.apk)"
+                echo ""
+                cat README.md
+              } > README.md.tmp && mv README.md.tmp README.md
+            fi
           fi
           
           git add README.md
-          git commit -m "chore: update README with latest APK download link [skip ci]" || echo "No changes to commit"
+          git commit -m "chore: update README with latest stable APK v${{ github.run_number }} [skip ci]" || echo "No changes to commit"
           git push
+      
+      - name: Update README (dev - add prerelease section)
+        if: github.ref == 'refs/heads/dev' && success()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Add or update dev prerelease section (keep stable section intact)
+          {
+            # Read file until we find "## Features" or end of file
+            in_dev_section=0
+            while IFS= read -r line; do
+              if [[ "$line" == "## Latest Dev Prerelease" ]]; then
+                in_dev_section=1
+                continue
+              fi
+              if [[ $in_dev_section -eq 1 ]]; then
+                if [[ "$line" == "##" * ]]; then
+                  # Found next section, output dev section first
+                  echo "## Latest Dev Prerelease"
+                  echo ""
+                  echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release.apk)"
+                  echo ""
+                  echo "$line"
+                  in_dev_section=0
+                fi
+              else
+                echo "$line"
+              fi
+            done < README.md > README.md.tmp
+            
+            # If we never found next section, append at end
+            if [[ $in_dev_section -eq 1 ]]; then
+              echo "## Latest Dev Prerelease" >> README.md.tmp
+              echo "" >> README.md.tmp
+              echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release.apk)" >> README.md.tmp
+              echo "" >> README.md.tmp
+            fi
+            
+            mv README.md.tmp README.md
+          }
+          
+          git add README.md
+          git commit -m "chore: update README with latest dev prerelease dev-${{ steps.sha.outputs.short_sha }} [skip ci]" || echo "No changes to commit"
+          git push origin dev
