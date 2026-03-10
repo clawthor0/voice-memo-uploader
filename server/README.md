@@ -8,6 +8,9 @@ Minimal Express service for receiving Android voice memo uploads.
 - `POST /webhook/upload-voice-memo` → multipart upload (`files` field, supports multiple files)
 - `POST /api/voice-memos/upload` → same upload handler (API alias)
 - `GET /api/voice-memos/status/:id` → upload status/result lookup
+- `GET /api/recordings` → list processed recordings for dashboard
+- `GET /api/recordings/:uploadId` → single recording detail payload
+- `GET /dashboard` → web UI dashboard
 
 Uploaded files are stored under:
 

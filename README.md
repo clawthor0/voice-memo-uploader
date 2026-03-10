@@ -15,8 +15,20 @@ A simple Android application for recording and uploading voice memos.
 - Record voice memos quickly
 - Upload directly to cloud storage
 - Simple, intuitive interface
+- Web dashboard for processed recordings/transcripts (`/dashboard`)
 
 ## Getting Started
+
+### Dashboard (Tailscale URL)
+
+Once the server is running and exposed through Tailscale Serve, open:
+
+- `https://<your-device>.<your-tailnet>.ts.net/dashboard`
+
+API endpoints used by the dashboard:
+
+- `GET /api/recordings`
+- `GET /api/recordings/:uploadId`
 
 ### Development
 

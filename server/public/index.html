@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voice Memo Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="topbar">
+        <h1>Voice Memo Dashboard</h1>
+        <p class="muted">Recordings, transcripts, categories, and processing status</p>
+      </header>
+
+      <section id="listView" class="card">
+        <div class="filters">
+          <input id="searchInput" type="search" placeholder="Search filename, transcript, summary, uploadId" />
+          <select id="categoryFilter">
+            <option value="">All categories</option>
+          </select>
+        </div>
+        <div id="resultsCount" class="muted small"></div>
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Upload ID</th>
+                <th>File</th>
+                <th>Date</th>
+                <th>Summary</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Transcript</th>
+              </tr>
+            </thead>
+            <tbody id="recordingsBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="detailView" class="card hidden"></section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
