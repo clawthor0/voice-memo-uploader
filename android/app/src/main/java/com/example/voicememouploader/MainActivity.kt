@@ -84,7 +84,7 @@ fun VoiceMemoUploaderApp(
     var showServerConfig by remember { mutableStateOf(false) }
     var serverIp by remember { mutableStateOf("https://webhooks-test.tail8ca5.ts.net") }
     var serverPort by remember { mutableStateOf("443") }
-    var uploadPath by remember { mutableStateOf("/webhook/upload-voice-memo") }
+    var uploadPath by remember { mutableStateOf("/voice/webhook/upload-voice-memo") }
 
     var recordingsOnly by remember { mutableStateOf(true) }
     var minDurationSeconds by remember { mutableStateOf("10") }
