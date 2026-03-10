@@ -240,6 +240,9 @@ app.get('/api/recordings/:uploadId', (req, res) => {
 });
 
 app.use(express.static(publicDir));
+app.get(['/', '/voice'], (req, res) => {
+  res.redirect('/dashboard');
+});
 app.get(['/dashboard', '/dashboard/recordings/:uploadId'], (req, res) => {
   res.sendFile(path.join(publicDir, 'index.html'));
 });

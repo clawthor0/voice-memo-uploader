@@ -21,6 +21,9 @@ const categoryFilterEl = document.getElementById('categoryFilter');
 const searchInputEl = document.getElementById('searchInput');
 const resultsCountEl = document.getElementById('resultsCount');
 
+const BASE_PATH = window.location.pathname.startsWith('/voice') ? '/voice' : '';
+const DASHBOARD_PATH = `${BASE_PATH}/dashboard`;
+
 let allRecordings = [];
 
 function statusBadge(status) {
@@ -52,7 +55,7 @@ function applyFilters() {
     const tid = `t${i}`;
     const transcript = item.transcript || '';
     return `<tr>
-      <td><a class="link" href="/dashboard/recordings/${encodeURIComponent(item.uploadId)}">${escapeHtml(item.uploadId)}</a></td>
+      <td><a class="link" href="${DASHBOARD_PATH}/recordings/${encodeURIComponent(item.uploadId)}">${escapeHtml(item.uploadId)}</a></td>
       <td>${escapeHtml(item.filename || '—')}</td>
       <td>${fmtDate(item.createdAt || item.processedAt || item.updatedAt)}</td>
       <td>${escapeHtml(item.summary || '—')}</td>
@@ -76,7 +79,7 @@ function applyFilters() {
 }
 
 async function loadList() {
-  const res = await fetch('/api/recordings');
+  const res = await fetch(`${BASE_PATH}/api/recordings`);
   if (!res.ok) throw new Error('Failed to load recordings');
   const data = await res.json();
   allRecordings = data.recordings || [];
@@ -89,15 +92,15 @@ async function loadList() {
 }
 
 async function loadDetail(uploadId) {
-  const res = await fetch(`/api/recordings/${encodeURIComponent(uploadId)}`);
+  const res = await fetch(`${BASE_PATH}/api/recordings/${encodeURIComponent(uploadId)}`);
   if (!res.ok) {
-    detailView.innerHTML = `<p>Recording not found.</p><a class="link back" href="/dashboard">← Back</a>`;
+    detailView.innerHTML = `<p>Recording not found.</p><a class="link back" href="${DASHBOARD_PATH}">← Back</a>`;
     return;
   }
   const data = await res.json();
   const item = data.recording;
   detailView.innerHTML = `
-    <a class="link back" href="/dashboard">← Back</a>
+    <a class="link back" href="${DASHBOARD_PATH}">← Back</a>
     <h2>Recording ${escapeHtml(item.uploadId)}</h2>
     <p><strong>Filename:</strong> ${escapeHtml(item.filename || '—')}</p>
     <p><strong>Date:</strong> ${fmtDate(item.createdAt || item.processedAt || item.updatedAt)}</p>
@@ -111,7 +114,11 @@ async function loadDetail(uploadId) {
 }
 
 function route() {
-  const match = window.location.pathname.match(/^\/dashboard\/recordings\/([^/]+)$/);
+  const path = window.location.pathname;
+  const detailRegex = BASE_PATH
+    ? new RegExp(`^${BASE_PATH}/dashboard/recordings/([^/]+)$`)
+    : /^\/dashboard\/recordings\/([^/]+)$/;
+  const match = path.match(detailRegex);
   if (match) {
     listView.classList.add('hidden');
     detailView.classList.remove('hidden');
