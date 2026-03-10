@@ -35,9 +35,9 @@ jobs:
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          if-no-files-found: warn
+          name: app-release-unsigned
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
       
       - name: Create Release (master only)
         if: github.ref == 'refs/heads/master' && success()
