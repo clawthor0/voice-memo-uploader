@@ -22,6 +22,8 @@ class UpdateService(
         return try {
             val request = Request.Builder()
                 .url("https://api.github.com/repos/$owner/$repo/releases/latest")
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "VoiceMemoUploader-Android")
                 .build()
 
             client.newCall(request).execute().use { response ->
@@ -43,7 +45,7 @@ class UpdateService(
                         val asset = assets.getJSONObject(i)
                         val name = asset.optString("name", "").lowercase()
                         if (name.endsWith(".apk")) {
-                            apkUrl = asset.optString("browser_download_url", null)
+                            apkUrl = asset.optString("browser_download_url").takeIf { it.isNotBlank() }
                             break
                         }
                     }
@@ -64,7 +66,8 @@ class UpdateService(
                 )
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            val msg = e.message ?: e.javaClass.simpleName
+            Result.failure(IOException("Update check error: $msg", e))
         }
     }
 

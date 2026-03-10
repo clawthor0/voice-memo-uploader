@@ -1,5 +1,7 @@
 package com.example.voicememouploader
 
+import android.os.Handler
+import android.os.Looper
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -8,22 +10,23 @@ import java.io.File
 import java.io.IOException
 
 class UploadService(
-    private val tailscaleIp: String = "100.100.100.100",
-    private val port: Int = 8080
+    private var serverHostOrUrl: String = "https://your-tailnet-name.ts.net",
+    private var port: Int = 443
 ) {
 
     private val client: OkHttpClient
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     init {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
-        
+
         client = OkHttpClient.Builder()
             .addInterceptor(logging)
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .build()
     }
 
@@ -33,7 +36,7 @@ class UploadService(
         onError: (String) -> Unit
     ) {
         try {
-            val baseUrl = "http://$tailscaleIp:$port"
+            val baseUrl = buildBaseUrl(serverHostOrUrl, port)
             val uploadUrl = "$baseUrl/api/voice-memos/upload"
 
             val multipartBuilder = MultipartBody.Builder()
@@ -50,37 +53,62 @@ class UploadService(
             }
 
             if (filesAdded == 0) {
-                onError("Upload error: No readable audio files found in selection")
+                postError(onError, "Upload error: No readable audio files found in selection")
                 return
             }
 
             val requestBody = multipartBuilder.build()
-
             val request = Request.Builder()
                 .url(uploadUrl)
                 .post(requestBody)
                 .build()
 
-            client.newCall(request).execute().use { response ->
-                val responseText = response.body?.string().orEmpty().take(500)
-                if (!response.isSuccessful) {
-                    onError("Upload failed: HTTP ${response.code} ${response.message}; endpoint=$uploadUrl; response=$responseText")
-                    return@use
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    val details = e.message ?: e.javaClass.simpleName
+                    postError(onError, "Network error: $details; endpoint=$uploadUrl")
                 }
 
-                onProgress("Upload successful: $filesAdded file(s). Response: $responseText")
-            }
-
-        } catch (e: IOException) {
-            val details = e.message ?: e.javaClass.simpleName
-            onError("Network error: $details; endpoint=http://$tailscaleIp:$port/api/voice-memos/upload")
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        val responseText = it.body?.string().orEmpty().take(500)
+                        if (!it.isSuccessful) {
+                            postError(
+                                onError,
+                                "Upload failed: HTTP ${it.code} ${it.message}; endpoint=$uploadUrl; response=$responseText"
+                            )
+                            return
+                        }
+                        postProgress(onProgress, "Upload successful: $filesAdded file(s). Response: $responseText")
+                    }
+                }
+            })
         } catch (e: Exception) {
             val details = e.message ?: e.javaClass.simpleName
-            onError("Upload error: $details (${e.javaClass.simpleName})")
+            postError(onError, "Upload error: $details (${e.javaClass.simpleName})")
         }
     }
 
-    fun updateServerConfig(ipAddress: String, port: Int) {
-        // Allow runtime configuration of server
+    private fun buildBaseUrl(hostOrUrl: String, port: Int): String {
+        val trimmed = hostOrUrl.trim()
+        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed.trimEnd('/')
+        } else {
+            val scheme = if (port == 443) "https" else "http"
+            "$scheme://$trimmed:$port"
+        }
+    }
+
+    private fun postProgress(onProgress: (String) -> Unit, message: String) {
+        mainHandler.post { onProgress(message) }
+    }
+
+    private fun postError(onError: (String) -> Unit, message: String) {
+        mainHandler.post { onError(message) }
+    }
+
+    fun updateServerConfig(hostOrUrl: String, port: Int) {
+        this.serverHostOrUrl = hostOrUrl
+        this.port = port
     }
 }

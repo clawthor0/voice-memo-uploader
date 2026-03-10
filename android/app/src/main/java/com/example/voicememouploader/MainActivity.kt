@@ -21,6 +21,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -48,9 +51,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val versionName = try {
-                packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.0"
+                packageManager.getPackageInfo(packageName, 0).versionName ?: "unknown"
             } catch (_: Exception) {
-                "1.0.0"
+                "unknown"
             }
 
             VoiceMemoUploaderApp(
@@ -72,14 +75,15 @@ fun VoiceMemoUploaderApp(
     currentVersion: String
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var memos by remember { mutableStateOf<List<VoiceMemo>>(emptyList()) }
     var selectedMemos by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var status by remember { mutableStateOf("") }
     var isUploading by remember { mutableStateOf(false) }
     var showServerConfig by remember { mutableStateOf(false) }
-    var serverIp by remember { mutableStateOf("100.100.100.100") }
-    var serverPort by remember { mutableStateOf("8080") }
+    var serverIp by remember { mutableStateOf("https://your-tailnet-name.ts.net") }
+    var serverPort by remember { mutableStateOf("443") }
 
     var recordingsOnly by remember { mutableStateOf(true) }
     var minDurationSeconds by remember { mutableStateOf("10") }
@@ -121,14 +125,18 @@ fun VoiceMemoUploaderApp(
                     onClick = {
                         isCheckingUpdates = true
                         updateStatus = "Checking for updates..."
-                        val result = updateService.checkForUpdate(currentVersion)
-                        result.onSuccess { info ->
-                            updateInfo = info
-                            updateStatus = if (info == null) "App is up to date" else "Update available: v${info.versionName}"
-                        }.onFailure {
-                            updateStatus = "Update check failed: ${it.message}"
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                updateService.checkForUpdate(currentVersion)
+                            }
+                            result.onSuccess { info ->
+                                updateInfo = info
+                                updateStatus = if (info == null) "App is up to date" else "Update available: v${info.versionName}"
+                            }.onFailure {
+                                updateStatus = "Update check failed: ${it.message ?: it.javaClass.simpleName}"
+                            }
+                            isCheckingUpdates = false
                         }
-                        isCheckingUpdates = false
                     },
                     enabled = !isCheckingUpdates,
                     modifier = Modifier.fillMaxWidth()
@@ -241,9 +249,9 @@ fun VoiceMemoUploaderApp(
 
                 if (showServerConfig) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(value = serverIp, onValueChange = { serverIp = it }, label = { Text("Tailscale IP") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = serverIp, onValueChange = { serverIp = it }, label = { Text("Server host or URL (https recommended)") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(value = serverPort, onValueChange = { serverPort = it }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = serverPort, onValueChange = { serverPort = it.filter(Char::isDigit) }, label = { Text("Port") }, modifier = Modifier.fillMaxWidth())
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -280,6 +288,8 @@ fun VoiceMemoUploaderApp(
                         if (selectedMemos.isNotEmpty()) {
                             isUploading = true
                             status = "Uploading..."
+                            val configuredPort = serverPort.toIntOrNull() ?: 443
+                            uploadService.updateServerConfig(serverIp, configuredPort)
                             val memosToUpload = memos.filter { selectedMemos.contains(it.id) }
                             uploadService.uploadMemos(
                                 memosToUpload,
