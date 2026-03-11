@@ -30,6 +30,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var mediaStoreRepository: MediaStoreRepository
     private lateinit var uploadService: UploadService
     private lateinit var updateService: UpdateService
+    private lateinit var recorderHelper: RecorderHelper
 
     private val requestPermissions =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
@@ -40,8 +41,12 @@ class MainActivity : ComponentActivity() {
         mediaStoreRepository = MediaStoreRepository(this)
         uploadService = UploadService()
         updateService = UpdateService()
+        recorderHelper = RecorderHelper(this)
 
-        val permissionsToRequest = mutableListOf(Manifest.permission.INTERNET)
+        val permissionsToRequest = mutableListOf(
+            Manifest.permission.INTERNET,
+            Manifest.permission.RECORD_AUDIO
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
         } else {
@@ -60,6 +65,7 @@ class MainActivity : ComponentActivity() {
                 mediaStoreRepository = mediaStoreRepository,
                 uploadService = uploadService,
                 updateService = updateService,
+                recorderHelper = recorderHelper,
                 currentVersion = versionName
             )
         }
@@ -72,6 +78,7 @@ fun VoiceMemoUploaderApp(
     mediaStoreRepository: MediaStoreRepository,
     uploadService: UploadService,
     updateService: UpdateService,
+    recorderHelper: RecorderHelper,
     currentVersion: String
 ) {
     val context = LocalContext.current
@@ -92,6 +99,12 @@ fun VoiceMemoUploaderApp(
     var selectedFolder by remember { mutableStateOf<String?>(null) }
     var folderExpanded by remember { mutableStateOf(false) }
     val topFolders by remember { mutableStateOf(mediaStoreRepository.getTopLevelFolders()) }
+
+    var isRecording by remember { mutableStateOf(false) }
+    var recordedPath by remember { mutableStateOf<String?>(null) }
+    var recordingName by remember { mutableStateOf("voice memo") }
+    var autoUpload by remember { mutableStateOf(true) }
+    var autoSummarize by remember { mutableStateOf(true) }
 
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -116,6 +129,104 @@ fun VoiceMemoUploaderApp(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Quick Record", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = recordingName,
+                    onValueChange = { recordingName = it },
+                    label = { Text("Recording name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        if (!isRecording) {
+                            val started = recorderHelper.startRecording(recordingName)
+                            started.onSuccess {
+                                isRecording = true
+                                status = "Recording started..."
+                            }.onFailure {
+                                status = "Recording failed to start: ${it.message ?: it.javaClass.simpleName}"
+                            }
+                        } else {
+                            val stopped = recorderHelper.stopRecording()
+                            stopped.onSuccess { path ->
+                                isRecording = false
+                                recordedPath = path
+                                status = "Recording captured. Review options, then Save."
+                            }.onFailure {
+                                isRecording = false
+                                status = "Recording stop failed: ${it.message ?: it.javaClass.simpleName}"
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (isRecording) "Stop Recording" else "Start Recording")
+                }
+
+                if (recordedPath != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = autoUpload, onCheckedChange = { autoUpload = it })
+                        Text("Upload automatically")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = autoSummarize, onCheckedChange = { autoSummarize = it })
+                        Text("Summarize automatically")
+                    }
+                    Button(
+                        onClick = {
+                            val path = recordedPath
+                            if (path == null) {
+                                status = "No recorded file found"
+                                return@Button
+                            }
+                            if (!autoUpload && autoSummarize) {
+                                status = "Summarize requires upload. Enable Upload or disable Summarize."
+                                return@Button
+                            }
+
+                            val file = java.io.File(path)
+                            if (!file.exists()) {
+                                status = "Recorded file missing"
+                                return@Button
+                            }
+
+                            if (autoUpload) {
+                                val configuredPort = serverPort.toIntOrNull() ?: 443
+                                uploadService.updateServerConfig(serverIp, configuredPort, uploadPath)
+                                val vm = VoiceMemo(
+                                    id = -System.currentTimeMillis(),
+                                    title = file.name,
+                                    path = file.absolutePath,
+                                    duration = 0L,
+                                    dateAdded = System.currentTimeMillis() / 1000,
+                                    size = file.length()
+                                )
+                                status = if (autoSummarize) {
+                                    "Uploading recording (summary enabled)..."
+                                } else {
+                                    "Uploading recording..."
+                                }
+                                isUploading = true
+                                uploadService.uploadMemos(
+                                    listOf(vm),
+                                    onProgress = { status = it; isUploading = false },
+                                    onError = { status = it; isUploading = false }
+                                )
+                            } else {
+                                status = "Saved locally only: ${file.name}"
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isRecording
+                    ) {
+                        Text("Save")
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Filters", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
