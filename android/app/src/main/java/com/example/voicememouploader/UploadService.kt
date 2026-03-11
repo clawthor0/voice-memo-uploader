@@ -49,7 +49,8 @@ class UploadService(
                 val file = File(memo.path)
                 if (file.exists() && file.isFile) {
                     val requestBody = file.asRequestBody("audio/mpeg".toMediaType())
-                    multipartBuilder.addFormDataPart("files", memo.title, requestBody)
+                    val safeName = sanitizeFilename(memo.title)
+                    multipartBuilder.addFormDataPart("files", safeName, requestBody)
                     filesAdded++
                 }
             }
@@ -107,6 +108,13 @@ class UploadService(
 
     private fun postError(onError: (String) -> Unit, message: String) {
         mainHandler.post { onError(message) }
+    }
+
+    private fun sanitizeFilename(name: String): String {
+        return name.trim()
+            .replace(" ", "_")
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .replace(Regex("_+"), "_")
     }
 
     fun pingEndpoint(onResult: (String) -> Unit) {
