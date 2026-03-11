@@ -79,18 +79,24 @@ class UpdateService(
 
     private fun pickChannelRelease(releases: JSONArray, channel: String): JSONObject? {
         val normalized = channel.lowercase()
+        val candidates = mutableListOf<JSONObject>()
+
         for (i in 0 until releases.length()) {
             val rel = releases.getJSONObject(i)
             val tag = rel.optString("tag_name", "").lowercase()
             val isPrerelease = rel.optBoolean("prerelease", false)
 
             if (normalized == "dev") {
-                if (isPrerelease || tag.startsWith("dev-")) return rel
+                if (isPrerelease || tag.startsWith("dev-")) candidates.add(rel)
             } else {
-                if (!isPrerelease && (tag.startsWith("v") || tag.startsWith("main-"))) return rel
+                if (!isPrerelease && (tag.startsWith("v") || tag.startsWith("main-"))) candidates.add(rel)
             }
         }
-        return null
+
+        if (candidates.isEmpty()) return null
+
+        // GitHub API order can be surprising; choose newest by publishedAt.
+        return candidates.maxByOrNull { it.optString("published_at", "") }
     }
 
     private fun extractVersion(tag: String): String {
