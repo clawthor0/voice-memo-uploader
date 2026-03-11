@@ -42,7 +42,7 @@ class UploadService(
                 return
             }
             val baseUrl = buildBaseUrl(serverHostOrUrl, port)
-            val normalizedPath = if (uploadPath.startsWith("/")) uploadPath else "/$uploadPath"
+            val normalizedPath = normalizePath(uploadPath)
             val uploadUrl = "$baseUrl$normalizedPath"
 
             val multipartBuilder = MultipartBody.Builder()
@@ -97,13 +97,19 @@ class UploadService(
     }
 
     private fun buildBaseUrl(hostOrUrl: String, port: Int): String {
-        val trimmed = hostOrUrl.trim()
+        val trimmed = hostOrUrl.trim().replace(" ", "")
         return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
             trimmed.trimEnd('/')
         } else {
             val scheme = if (port == 443) "https" else "http"
             "$scheme://$trimmed:$port"
         }
+    }
+
+    private fun normalizePath(path: String): String {
+        val noSpaces = path.trim().replace(" ", "")
+        val withLeading = if (noSpaces.startsWith("/")) noSpaces else "/$noSpaces"
+        return withLeading.replace(Regex("/{2,}"), "/")
     }
 
     private fun postProgress(onProgress: (String) -> Unit, message: String) {
@@ -123,7 +129,7 @@ class UploadService(
 
     fun pingEndpoint(onResult: (String) -> Unit) {
         val baseUrl = buildBaseUrl(serverHostOrUrl, port)
-        val normalizedPath = if (uploadPath.startsWith("/")) uploadPath else "/$uploadPath"
+        val normalizedPath = normalizePath(uploadPath)
         val url = "$baseUrl$normalizedPath"
 
         val request = Request.Builder().url(url).get().build()
