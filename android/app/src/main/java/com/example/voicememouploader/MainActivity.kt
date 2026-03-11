@@ -10,8 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -122,7 +122,12 @@ fun VoiceMemoUploaderApp(
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Text(
                     text = "Voice Memo Uploader",
                     fontSize = 28.sp,
@@ -318,6 +323,19 @@ fun VoiceMemoUploaderApp(
                     ) { Text("Ping Upload Endpoint") }
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        val base = serverIp.trim().ifBlank { "https://siemtestclient.tail8ca5.ts.net" }.trimEnd('/')
+                        val dashUrl = if (base.contains("/voice")) "$base/dashboard" else "$base/voice/dashboard"
+                        val i = Intent(context, DashboardActivity::class.java).apply {
+                            putExtra("url", dashUrl)
+                        }
+                        context.startActivity(i)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Open Voice Dashboard") }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 if (status.isNotEmpty()) {
                     Text(
@@ -331,8 +349,8 @@ fun VoiceMemoUploaderApp(
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("Memos (${selectedMemos.size}/${memos.size} selected)", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
-                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().background(Color(0xFFF5F5F5)).padding(8.dp)) {
-                        items(memos) { memo ->
+                    Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFF5F5F5)).padding(8.dp)) {
+                        memos.forEach { memo ->
                             MemoListItem(
                                 memo = memo,
                                 isSelected = selectedMemos.contains(memo.id),
@@ -343,8 +361,6 @@ fun VoiceMemoUploaderApp(
                             )
                         }
                     }
-                } else {
-                    Spacer(modifier = Modifier.weight(1f))
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
