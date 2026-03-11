@@ -46,6 +46,12 @@ jobs:
       - name: Generate short SHA
         id: sha
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Read app version
+        id: appver
+        run: |
+          ver=$(grep -oP 'versionName\s*=\s*"\K[^"]+' ${{ env.ANDROID_BUILD_DIR }}/app/build.gradle.kts | head -1)
+          echo "version=$ver" >> $GITHUB_OUTPUT
       
       - name: Create Stable Release (master/main only)
         if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && success()
@@ -64,8 +70,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ${{ env.ANDROID_BUILD_DIR }}/app/build/outputs/apk/release/app-release-unsigned.apk
-          tag_name: dev-${{ steps.sha.outputs.short_sha }}
-          name: dev-${{ steps.sha.outputs.short_sha }} - Development Prerelease
+          tag_name: ${{ steps.appver.outputs.version }}-dev
+          name: ${{ steps.appver.outputs.version }}-dev - Development Prerelease
           draft: false
           prerelease: true
         env:
@@ -121,7 +127,7 @@ jobs:
                   # Found next section, output dev section first
                   echo "## Latest Dev Prerelease"
                   echo ""
-                  echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release-unsigned.apk)"
+                  echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/${{ steps.appver.outputs.version }}-dev/app-release-unsigned.apk)"
                   echo ""
                   echo "$line"
                   in_dev_section=0
@@ -135,7 +141,7 @@ jobs:
             if [[ $in_dev_section -eq 1 ]]; then
               echo "## Latest Dev Prerelease" >> README.md.tmp
               echo "" >> README.md.tmp
-              echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/dev-${{ steps.sha.outputs.short_sha }}/app-release-unsigned.apk)" >> README.md.tmp
+              echo "[📥 Download Development APK](https://github.com/clawthor0/voice-memo-uploader/releases/download/${{ steps.appver.outputs.version }}-dev/app-release-unsigned.apk)" >> README.md.tmp
               echo "" >> README.md.tmp
             fi
             
@@ -143,5 +149,5 @@ jobs:
           }
           
           git add README.md
-          git commit -m "chore: update README with latest dev prerelease dev-${{ steps.sha.outputs.short_sha }} [skip ci]" || echo "No changes to commit"
+          git commit -m "chore: update README with latest dev prerelease ${{ steps.appver.outputs.version }}-dev [skip ci]" || echo "No changes to commit"
           git push origin dev
