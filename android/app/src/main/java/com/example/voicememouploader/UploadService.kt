@@ -98,11 +98,22 @@ class UploadService(
 
     private fun buildBaseUrl(hostOrUrl: String, port: Int): String {
         val trimmed = hostOrUrl.trim().replace(" ", "")
-        return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-            trimmed.trimEnd('/')
-        } else {
-            val scheme = if (port == 443) "https" else "http"
-            "$scheme://$trimmed:$port"
+        val defaultScheme = if (port == 443) "https" else "http"
+
+        return try {
+            val withScheme = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                trimmed
+            } else {
+                "$defaultScheme://$trimmed"
+            }
+
+            val uri = java.net.URI(withScheme)
+            val scheme = uri.scheme ?: defaultScheme
+            val host = uri.host ?: uri.authority?.substringBefore(':') ?: trimmed
+            val explicitPort = if (uri.port != -1) uri.port else port
+            "$scheme://$host:$explicitPort"
+        } catch (_: Exception) {
+            "$defaultScheme://$trimmed:$port"
         }
     }
 
