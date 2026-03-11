@@ -226,6 +226,23 @@ app.get('/api/recordings', (req, res) => {
   res.json({ recordings, count: recordings.length });
 });
 
+// Compatibility aliases used by older dashboard/app builds.
+app.get(['/webhook/list-voice-memos', '/voice/webhook/list-voice-memos', '/api/uploads', '/voice/api/uploads'], (req, res) => {
+  const recordings = buildRecordings();
+  const items = recordings.map((r) => ({
+    uploadId: r.uploadId,
+    name: r.filename,
+    uploadedAt: r.createdAt || r.updatedAt || r.processedAt || null,
+    status: r.status,
+    category: r.category,
+    summary: r.summary,
+    transcript: r.transcript,
+    error: r.error,
+  }));
+
+  res.json({ items, count: items.length });
+});
+
 app.get('/api/recordings/:uploadId', (req, res) => {
   const recordings = buildRecordings().filter((r) => r.uploadId === req.params.uploadId);
   if (!recordings.length) {
