@@ -2,6 +2,7 @@ package com.example.voicememouploader
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 
@@ -18,10 +19,10 @@ class UpdateService(
 ) {
     private val client = OkHttpClient()
 
-    fun checkForUpdate(currentVersion: String): Result<UpdateInfo?> {
+    fun checkForUpdate(currentVersion: String, channel: String = "main"): Result<UpdateInfo?> {
         return try {
             val request = Request.Builder()
-                .url("https://api.github.com/repos/$owner/$repo/releases/latest")
+                .url("https://api.github.com/repos/$owner/$repo/releases")
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "VoiceMemoUploader-Android")
                 .build()
@@ -29,20 +30,27 @@ class UpdateService(
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     if (response.code == 404) {
-                        return Result.failure(IOException("Update feed not found (404). If repo is private, use server-hosted update feed or publish GitHub Releases publicly."))
+                        return Result.failure(IOException("Update feed not found (404)."))
                     }
                     return Result.failure(IOException("Update check failed: HTTP ${response.code}"))
                 }
 
                 val body = response.body?.string() ?: return Result.success(null)
-                val json = JSONObject(body)
+                val releases = JSONArray(body)
+                if (releases.length() == 0) return Result.success(null)
 
-                val tag = json.optString("tag_name", "").removePrefix("v")
-                val notes = json.optString("body", "")
-                val htmlUrl = json.optString("html_url", "")
+                val target = pickChannelRelease(releases, channel)
+                    ?: return Result.success(null)
+
+                val tagRaw = target.optString("tag_name", "")
+                val tagVersion = extractVersion(tagRaw)
+                if (tagVersion.isBlank()) return Result.success(null)
+
+                val notes = target.optString("body", "")
+                val htmlUrl = target.optString("html_url", "")
 
                 var apkUrl: String? = null
-                val assets = json.optJSONArray("assets")
+                val assets = target.optJSONArray("assets")
                 if (assets != null) {
                     for (i in 0 until assets.length()) {
                         val asset = assets.getJSONObject(i)
@@ -54,14 +62,12 @@ class UpdateService(
                     }
                 }
 
-                if (tag.isBlank()) return Result.success(null)
-
-                val isNewer = compareVersions(tag, currentVersion) > 0
+                val isNewer = compareVersions(tagVersion, currentVersion) > 0
                 if (!isNewer) return Result.success(null)
 
                 Result.success(
                     UpdateInfo(
-                        versionName = tag,
+                        versionName = tagVersion,
                         notes = notes,
                         apkUrl = apkUrl,
                         releaseUrl = htmlUrl
@@ -72,6 +78,28 @@ class UpdateService(
             val msg = e.message ?: e.javaClass.simpleName
             Result.failure(IOException("Update check error: $msg", e))
         }
+    }
+
+    private fun pickChannelRelease(releases: JSONArray, channel: String): JSONObject? {
+        val normalized = channel.lowercase()
+        for (i in 0 until releases.length()) {
+            val rel = releases.getJSONObject(i)
+            val tag = rel.optString("tag_name", "").lowercase()
+            val isPrerelease = rel.optBoolean("prerelease", false)
+
+            if (normalized == "dev") {
+                if (isPrerelease || tag.startsWith("dev-")) return rel
+            } else {
+                if (!isPrerelease && (tag.startsWith("v") || tag.startsWith("main-"))) return rel
+            }
+        }
+        return null
+    }
+
+    private fun extractVersion(tag: String): String {
+        val clean = tag.removePrefix("v")
+        val regex = Regex("(\\d+\\.\\d+\\.\\d+)")
+        return regex.find(clean)?.value ?: clean
     }
 
     private fun compareVersions(a: String, b: String): Int {

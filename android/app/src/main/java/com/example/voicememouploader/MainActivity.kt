@@ -95,6 +95,8 @@ fun VoiceMemoUploaderApp(
     var isCheckingUpdates by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     var updateStatus by remember { mutableStateOf("") }
+    var releaseChannel by remember { mutableStateOf("main") }
+    var releaseChannelExpanded by remember { mutableStateOf(false) }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -122,13 +124,41 @@ fun VoiceMemoUploaderApp(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
+                ExposedDropdownMenuBox(
+                    expanded = releaseChannelExpanded,
+                    onExpandedChange = { releaseChannelExpanded = !releaseChannelExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = releaseChannel,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Release channel") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = releaseChannelExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = releaseChannelExpanded,
+                        onDismissRequest = { releaseChannelExpanded = false }
+                    ) {
+                        DropdownMenuItem(text = { Text("main") }, onClick = {
+                            releaseChannel = "main"
+                            releaseChannelExpanded = false
+                        })
+                        DropdownMenuItem(text = { Text("dev") }, onClick = {
+                            releaseChannel = "dev"
+                            releaseChannelExpanded = false
+                        })
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
                         isCheckingUpdates = true
-                        updateStatus = "Checking for updates..."
+                        updateStatus = "Checking for updates ($releaseChannel channel)..."
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
-                                updateService.checkForUpdate(currentVersion)
+                                updateService.checkForUpdate(currentVersion, releaseChannel)
                             }
                             result.onSuccess { info ->
                                 updateInfo = info
