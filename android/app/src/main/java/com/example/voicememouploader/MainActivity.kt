@@ -76,15 +76,16 @@ fun VoiceMemoUploaderApp(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val prefs = remember { context.getSharedPreferences("voice_memo_uploader", 0) }
 
     var memos by remember { mutableStateOf<List<VoiceMemo>>(emptyList()) }
     var selectedMemos by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var status by remember { mutableStateOf("") }
     var isUploading by remember { mutableStateOf(false) }
     var showServerConfig by remember { mutableStateOf(false) }
-    var serverIp by remember { mutableStateOf("https://webhooks-test.tail8ca5.ts.net") }
-    var serverPort by remember { mutableStateOf("443") }
-    var uploadPath by remember { mutableStateOf("/voice/webhook/upload-voice-memo") }
+    var serverIp by remember { mutableStateOf(prefs.getString("server_url", "") ?: "") }
+    var serverPort by remember { mutableStateOf(prefs.getString("server_port", "443") ?: "443") }
+    var uploadPath by remember { mutableStateOf(prefs.getString("upload_path", "/voice/webhook/upload-voice-memo") ?: "/voice/webhook/upload-voice-memo") }
 
     var recordingsOnly by remember { mutableStateOf(true) }
     var minDurationSeconds by remember { mutableStateOf("10") }
@@ -98,6 +99,14 @@ fun VoiceMemoUploaderApp(
     var releaseChannel by remember { mutableStateOf("main") }
     var releaseChannelExpanded by remember { mutableStateOf(false) }
 
+    LaunchedEffect(serverIp, serverPort, uploadPath) {
+        prefs.edit()
+            .putString("server_url", serverIp)
+            .putString("server_port", serverPort)
+            .putString("upload_path", uploadPath)
+            .apply()
+    }
+
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -107,104 +116,6 @@ fun VoiceMemoUploaderApp(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-
-                Surface(
-                    color = Color(0xFFE8F0FE),
-                    tonalElevation = 2.dp,
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "App Version: v$currentVersion",
-                        color = Color(0xFF1A73E8),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                ExposedDropdownMenuBox(
-                    expanded = releaseChannelExpanded,
-                    onExpandedChange = { releaseChannelExpanded = !releaseChannelExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = releaseChannel,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Release channel") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = releaseChannelExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = releaseChannelExpanded,
-                        onDismissRequest = { releaseChannelExpanded = false }
-                    ) {
-                        DropdownMenuItem(text = { Text("main") }, onClick = {
-                            releaseChannel = "main"
-                            releaseChannelExpanded = false
-                        })
-                        DropdownMenuItem(text = { Text("dev") }, onClick = {
-                            releaseChannel = "dev"
-                            releaseChannelExpanded = false
-                        })
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        isCheckingUpdates = true
-                        updateStatus = "Checking for updates ($releaseChannel channel)..."
-                        scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                updateService.checkForUpdate(currentVersion, releaseChannel)
-                            }
-                            result.onSuccess { info ->
-                                updateInfo = info
-                                updateStatus = if (info == null) "App is up to date" else "Update available: v${info.versionName}"
-                            }.onFailure {
-                                updateStatus = "Update check failed: ${it.message ?: it.javaClass.simpleName}"
-                            }
-                            isCheckingUpdates = false
-                        }
-                    },
-                    enabled = !isCheckingUpdates,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(if (isCheckingUpdates) "Checking..." else "Check for App Update")
-                }
-
-                if (updateStatus.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(updateStatus, fontSize = 12.sp, color = Color.Gray)
-                }
-
-                updateInfo?.let { info ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text("Update v${info.versionName} available", fontWeight = FontWeight.SemiBold)
-                            if (info.notes.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(info.notes.take(180), fontSize = 12.sp, color = Color.Gray)
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                info.apkUrl?.let { apk ->
-                                    Button(onClick = {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apk))
-                                        context.startActivity(intent)
-                                    }) { Text("Download APK") }
-                                }
-                                OutlinedButton(onClick = {
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.releaseUrl))
-                                    context.startActivity(intent)
-                                }) { Text("Open Release") }
-                            }
-                        }
-                    }
-                }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Filters", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
@@ -325,6 +236,106 @@ fun VoiceMemoUploaderApp(
                     Spacer(modifier = Modifier.weight(1f))
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    color = Color(0xFFE8F0FE),
+                    tonalElevation = 2.dp,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Text(
+                            text = "App Version: v$currentVersion",
+                            color = Color(0xFF1A73E8),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ExposedDropdownMenuBox(
+                            expanded = releaseChannelExpanded,
+                            onExpandedChange = { releaseChannelExpanded = !releaseChannelExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = releaseChannel,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Release channel") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = releaseChannelExpanded) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = releaseChannelExpanded,
+                                onDismissRequest = { releaseChannelExpanded = false }
+                            ) {
+                                DropdownMenuItem(text = { Text("main") }, onClick = {
+                                    releaseChannel = "main"
+                                    releaseChannelExpanded = false
+                                })
+                                DropdownMenuItem(text = { Text("dev") }, onClick = {
+                                    releaseChannel = "dev"
+                                    releaseChannelExpanded = false
+                                })
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                isCheckingUpdates = true
+                                updateStatus = "Checking $releaseChannel releases..."
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        updateService.checkForUpdate(currentVersion, releaseChannel)
+                                    }
+                                    result.onSuccess { info ->
+                                        updateInfo = info
+                                        updateStatus = if (info == null) {
+                                            "No release found for channel '$releaseChannel'"
+                                        } else {
+                                            "Latest $releaseChannel release: v${info.versionName}"
+                                        }
+                                    }.onFailure {
+                                        updateStatus = "Update check failed: ${it.message ?: it.javaClass.simpleName}"
+                                    }
+                                    isCheckingUpdates = false
+                                }
+                            },
+                            enabled = !isCheckingUpdates,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (isCheckingUpdates) "Checking..." else "Check Release Channel")
+                        }
+
+                        if (updateStatus.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(updateStatus, fontSize = 12.sp, color = Color.Gray)
+                        }
+
+                        updateInfo?.let { info ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Published on $releaseChannel: v${info.versionName}", fontWeight = FontWeight.SemiBold)
+                            if (info.notes.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(info.notes.take(180), fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                info.apkUrl?.let { apk ->
+                                    Button(onClick = {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(apk))
+                                        context.startActivity(intent)
+                                    }) { Text("Download This Version") }
+                                }
+                                OutlinedButton(onClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.releaseUrl))
+                                    context.startActivity(intent)
+                                }) { Text("Open Release") }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
                         if (selectedMemos.isNotEmpty()) {

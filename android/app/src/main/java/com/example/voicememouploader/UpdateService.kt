@@ -62,9 +62,6 @@ class UpdateService(
                     }
                 }
 
-                val isNewer = compareVersions(tagVersion, currentVersion) > 0
-                if (!isNewer) return Result.success(null)
-
                 Result.success(
                     UpdateInfo(
                         versionName = tagVersion,

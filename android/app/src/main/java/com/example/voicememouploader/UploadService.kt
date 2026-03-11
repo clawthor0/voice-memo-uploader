@@ -10,7 +10,7 @@ import java.io.File
 import java.io.IOException
 
 class UploadService(
-    private var serverHostOrUrl: String = "https://your-tailnet-name.ts.net",
+    private var serverHostOrUrl: String = "",
     private var port: Int = 443,
     private var uploadPath: String = "/voice/webhook/upload-voice-memo"
 ) {
@@ -37,6 +37,10 @@ class UploadService(
         onError: (String) -> Unit
     ) {
         try {
+            if (serverHostOrUrl.isBlank()) {
+                postError(onError, "Upload error: Server URL is empty. Set it in Server Config first.")
+                return
+            }
             val baseUrl = buildBaseUrl(serverHostOrUrl, port)
             val normalizedPath = if (uploadPath.startsWith("/")) uploadPath else "/$uploadPath"
             val uploadUrl = "$baseUrl$normalizedPath"
