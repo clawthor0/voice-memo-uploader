@@ -93,6 +93,7 @@ fun VoiceMemoUploaderApp(
     var serverIp by remember { mutableStateOf(prefs.getString("server_url", "") ?: "") }
     var serverPort by remember { mutableStateOf(prefs.getString("server_port", "443") ?: "443") }
     var uploadPath by remember { mutableStateOf(prefs.getString("upload_path", "/voice/webhook/upload-voice-memo") ?: "/voice/webhook/upload-voice-memo") }
+    var telemetryWebhookUrl by remember { mutableStateOf(prefs.getString("telemetry_webhook_url", "") ?: "") }
 
     var recordingsOnly by remember { mutableStateOf(true) }
     var minDurationSeconds by remember { mutableStateOf("10") }
@@ -112,11 +113,12 @@ fun VoiceMemoUploaderApp(
     var releaseChannel by remember { mutableStateOf("main") }
     var releaseChannelExpanded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(serverIp, serverPort, uploadPath) {
+    LaunchedEffect(serverIp, serverPort, uploadPath, telemetryWebhookUrl) {
         prefs.edit()
             .putString("server_url", serverIp)
             .putString("server_port", serverPort)
             .putString("upload_path", uploadPath)
+            .putString("telemetry_webhook_url", telemetryWebhookUrl)
             .apply()
     }
 
@@ -202,7 +204,7 @@ fun VoiceMemoUploaderApp(
 
                             if (autoUpload) {
                                 val configuredPort = serverPort.toIntOrNull() ?: 443
-                                uploadService.updateServerConfig(serverIp, configuredPort, uploadPath)
+                                uploadService.updateServerConfig(serverIp, configuredPort, uploadPath, telemetryWebhookUrl, currentVersion, releaseChannel)
                                 val vm = VoiceMemo(
                                     id = -System.currentTimeMillis(),
                                     title = file.name,
@@ -313,10 +315,17 @@ fun VoiceMemoUploaderApp(
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(value = uploadPath, onValueChange = { uploadPath = it }, label = { Text("Upload path (or webhook path)") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = telemetryWebhookUrl,
+                        onValueChange = { telemetryWebhookUrl = it },
+                        label = { Text("Fallback telemetry webhook URL (OpenClaw)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = {
                             val configuredPort = serverPort.toIntOrNull() ?: 443
-                            uploadService.updateServerConfig(serverIp, configuredPort, uploadPath)
+                            uploadService.updateServerConfig(serverIp, configuredPort, uploadPath, telemetryWebhookUrl, currentVersion, releaseChannel)
                             uploadService.pingEndpoint { status = it }
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -469,7 +478,7 @@ fun VoiceMemoUploaderApp(
                             isUploading = true
                             status = "Uploading..."
                             val configuredPort = serverPort.toIntOrNull() ?: 443
-                            uploadService.updateServerConfig(serverIp, configuredPort, uploadPath)
+                            uploadService.updateServerConfig(serverIp, configuredPort, uploadPath, telemetryWebhookUrl, currentVersion, releaseChannel)
                             val memosToUpload = memos.filter { selectedMemos.contains(it.id) }
                             uploadService.uploadMemos(
                                 memosToUpload,
